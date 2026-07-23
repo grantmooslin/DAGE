@@ -30,22 +30,136 @@ path_org <- 'data_org'
 path_clean <- 'data_clean'
 
 # Load in excerpt files
-survey <- read_csv(here::here(path_org, 'survey_raw.csv'))
+data_qualtrics <- read_csv(here::here(path_org, 'Excerpt For Testing Qualtrics Export.csv'))
+data_prolific <- read_csv(here::here(path_org, 'Excerpt For Testing Prolific Export.csv'))
+
+# Join by prolific ID number
+survey <- left_join(data_qualtrics, data_prolific, by = c("Q0" = "Participant id"))
 ```
 
-Preliminary EDA reveals two anomalous entries in certain fields. CONSENT_REVOKED and DATA_EXPIRED
-
-*Load in excerpt files*
+*Rename vars*
 
 ```{r}
-
+survey <- survey |> 
+  rename(
+    q1_dislike_groupdiscussion = Q1,
+    q2_comfort_groupdiscussion = Q2,
+    q3_nervous_groupdiscussion = Q3,
+    q4_like_groupdiscussion = Q4,
+    q5_tense_newppl_groupdiscussion = Q5,
+    q6_relaxed_groupdiscussion = Q6,
+    q13_nervous_newppl_convo = Q13,
+    q14_nofear_speaking_convo = Q14,
+    q15_nervous_convo = Q15,
+    q16_relaxed_convo = Q16,
+    q17_relaxed_newppl_convo = Q17,
+    q18_afraid_convo = Q18...30,
+    q26_public_transport_3months = Q26,
+    q27_public_transit_dayuse = Q27,
+    q28_rideshare_3months = Q28,
+    q29_rideshare_dayuse = Q29,
+    q20_license = Q20,
+    q21_car_access = Q21,
+    q_advice_text = Q18...37,
+    q_transport_pref_text = Q19,
+    dem_age = Age,
+    dem_sex = Sex,
+    dem_ethnicity = 'Ethnicity simplified',
+    dem_birthcountry = 'Country of birth',
+    dem_residencecountry = 'Country of residence',
+    dem_nationality = Nationality,
+    dem_language = Language,
+    dem_student = 'Student status',
+    dem_employment = 'Employment status'
+  )
 ```
 
-You can add options to executable code like this
+*filter problematic observations*
 
 ```{r}
-#| echo: false
-2 * 2
+survey <- survey |> filter(Finished == TRUE)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+```{r}
+#Identify forward and reverse-coded Q's (Higher scores = more apprehensive)
+forward_code <- c(
+  "q1_dislike_groupdiscussion",
+  "q3_nervous_groupdiscussion",
+  "q5_tense_newppl_groupdiscussion",
+  "q13_nervous_newppl_convo",
+  "q15_nervous_convo",
+  "q18_afraid_convo"
+  )
+reverse_code <- c(
+  "q2_comfort_groupdiscussion",
+  "q4_like_groupdiscussion",
+  "q6_relaxed_groupdiscussion",
+  "q14_nofear_speaking_convo",
+  "q16_relaxed_convo",
+  "q17_relaxed_newppl_convo"
+  )
+
+# Set numeric values for Likert scales
+likert_forward <- c(
+  "Strongly disagree"          = 1,
+  "Somewhat disagree"          = 2,
+  "Neither agree nor disagree" = 3,
+  "Somewhat agree"             = 4,
+  "Strongly agree"             = 5
+)
+likert_reverse <- c(
+  "Strongly disagree"          = 5,
+  "Somewhat disagree"          = 4,
+  "Neither agree nor disagree" = 3,
+  "Somewhat agree"             = 2,
+  "Strongly agree"             = 1
+)
+
+# Convert to numeric
+survey <- survey |>
+  mutate(
+    across(all_of(forward_code), ~ likert_forward[.x]),
+    across(all_of(reverse_code), ~ likert_reverse[.x])
+  )
+```
+
+
+
+```{r}
+group_discussion <- c("q1_dislike_groupdiscussion",
+                      "q2_comfort_groupdiscussion",
+                      "q3_nervous_groupdiscussion",
+                      "q4_like_groupdiscussion",
+                      "q6_relaxed_groupdiscussion"
+                      )
+
+solo_conversation <- c("q13_nervous_newppl_convo",
+                       "q14_nofear_speaking_convo",
+                       "q15_nervous_convo",
+                       "q16_relaxed_convo",
+                       "q17_relaxed_newppl_convo",
+                       "q18_afraid_convo"
+                       )
+survey <- survey |> 
+  mutate(
+    group_apprehension = rowSums(
+      pick(all_of(group_discussion)), na.rm = TRUE),
+    solo_apprehension = rowSums(
+      pick(all_of(solo_conversation)), na.rm = TRUE),
+    biggest_fear = case_when(
+      group_apprehension > solo_apprehension ~ "group_apprehension",
+      solo_apprehension > group_apprehension ~ "solo_apprehension",
+      .default = NA
+    )
+  )
+```
+
+*Select out unnecessary columns*
+
+```{r}
+# Data for apprehension research Q
+survey_apprehension <- survey |> select(q_advice_text, q_transport_text_pref, biggest_fear)
+
+# Data for transport research Q
+survey_transport <- survey |> select(q_advice_text, q_transport_text_pref, highest_transport)
+```
