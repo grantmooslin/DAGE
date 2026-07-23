@@ -3,7 +3,7 @@
 **Group:** DAGE
 **Course:** PSYCH 755, Summer 2026
 
-One or two sentences on what this project asks and what it found. Replace this before you submit.
+ >>>>> One or two sentences on what this project asks and what it found. Replace this before you submit. <<<<<
 
 ## Members
 
@@ -24,7 +24,8 @@ If your GitHub handle is not your name, this table is how we connect your commit
 | `contributions.md` | Who owned what. |
 | `memos/` | Individual research memos, one per member. |
 | `references.bib` | Shared BibTeX file for the manuscript and memos. |
-| `data/` | Data used in this project. |
+| `data_org/` | Houses original/raw data for the project |
+| `data_clean/` | Houses cleaned or otherwise modified data for the project |
 
 ## Reproducing this project
 
@@ -35,4 +36,4 @@ quarto render index.qmd
 
 ## Notes
 
-[Anything a reader needs to know that does not belong in the manuscript. Delete this section if you have nothing to say here.]
+DAGE is life

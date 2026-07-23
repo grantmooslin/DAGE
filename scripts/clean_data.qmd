@@ -1,0 +1,51 @@
+---
+title: "Clean Survey Data"
+format: 
+  html:
+    page-layout: full
+    self-contained: true
+    toc: true
+    toc-depth: 3
+execute: 
+  warning: false
+editor_options: 
+  chunk_output_type: console
+---
+
+## Code Status
+
+In Progress
+
+## Purpose
+
+Prepare survey data for analysis regarding research Q's
+
+## Setup
+
+```{r}
+library(tidyverse)
+
+# Point to data folders in the repo
+path_org <- 'data_org'
+path_clean <- 'data_clean'
+
+# Load in excerpt files
+survey <- read_csv(here::here(path_org, 'survey_raw.csv'))
+```
+
+Preliminary EDA reveals two anomalous entries in certain fields. CONSENT_REVOKED and DATA_EXPIRED
+
+*Load in excerpt files*
+
+```{r}
+
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
