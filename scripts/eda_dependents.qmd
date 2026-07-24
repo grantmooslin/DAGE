@@ -1,0 +1,110 @@
+---
+title: "EDA of dependent variables"
+format: 
+  html:
+    page-layout: full
+    self-contained: true
+    toc: true
+    toc-depth: 3
+execute: 
+  warning: false
+editor_options: 
+  chunk_output_type: console
+---
+
+## Code Status
+
+In Progress (Expected to need updating upon receiving the full dataset)
+
+## Purpose
+
+Conduct EDA on both dependent variables (greatest apprehension & most frequently used transportation method)
+
+- Prepare tables/figures for memo on the distribution of dependent variables
+
+- Elaborate on considerations for modelling informed by these findings
+
+## Setup
+
+```{r}
+library(tidyverse)
+path_clean <- 'data_clean'
+survey <- read_csv(here::here(path_clean, "survey_clean.csv"),
+                   show_col_types = FALSE)
+
+# Apprehension sample
+survey_ap <- survey |> filter(
+  !is.na(q_advice_text),
+  if_all(q1_dislike_groupdiscussion:q18_afraid_convo, \(x) !is.na(x)))
+
+# Transportation sample
+survey_ts <- survey |> filter(
+  !is.na(q_transport_pref_text),
+  if_all(q26_public_transit_3months:q29_rideshare_dayuse, \(x) !is.na(x)))
+```
+
+## EDA of apprehension scores
+
+*Shape of both distributions*
+
+```{r}
+survey_ap |>
+  pivot_longer(
+    cols = c(solo_apprehension, group_apprehension),
+    names_to = "type",
+    values_to = "score"
+  ) |>
+  ggplot(aes(x = score, fill = type)) +
+  geom_density(alpha = 0.5)
+```
+
+```{r}
+r2 <- summary(lm(group_apprehension ~ solo_apprehension, data = survey_ap))$r.squared
+
+ggplot(survey_ap, aes(x = solo_apprehension, y = group_apprehension)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  annotate("text", x = Inf, y = Inf, hjust = 1.1, vjust = 1.5,
+           label = paste0("R\u00b2 = ", round(r2, 2)))
+```
+
+```{R}
+survey_ap |>
+  mutate(biggest_fear = biggest_fear |>
+           replace_na("NA") |>
+           factor(levels = c("solo_apprehension", "NA", "group_apprehension"))) |>
+  ggplot(aes(x = biggest_fear)) +
+  geom_bar()
+```
+
+## EDA of transportation scores
+
+```{r}
+survey_ts |>
+  pivot_longer(
+    cols = c(rideshare_count, public_transit_count),
+    names_to = "type",
+    values_to = "count"
+  ) |>
+  ggplot(aes(x = count, fill = type)) +
+  geom_density(alpha = 0.5)
+```
+
+```{r}
+r2 <- summary(lm(rideshare_count ~ public_transit_count, data = survey_ts))$r.squared
+
+ggplot(survey_ts, aes(x = rideshare_count, y = public_transit_count)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  annotate("text", x = Inf, y = Inf, hjust = 1.1, vjust = 1.5,
+           label = paste0("R\u00b2 = ", round(r2, 2)))
+```
+
+```{r}
+survey_ts |>
+  mutate(highest_transport = highest_transport |>
+           replace_na("NA") |>
+           factor(levels = c("rideshare", "NA", "public_transit"))) |>
+  ggplot(aes(x = highest_transport)) +
+  geom_bar()
+```

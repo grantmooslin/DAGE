@@ -1,0 +1,291 @@
+---
+title: "Clean Survey Data"
+format: 
+  html:
+    page-layout: full
+    self-contained: true
+    toc: true
+    toc-depth: 3
+execute: 
+  warning: false
+editor_options: 
+  chunk_output_type: console
+---
+
+## Code Status
+
+Complete - pending review
+
+## Purpose
+
+Prepare survey data for analysis regarding research Q's
+
+1. Create dependent categorical variables:
+- Largest apprehension between group discussions and solo conversations
+- Most frequently used transportation between rideshare and public transit
+
+2. Basic cleaning of independent open-text variables for initial analysis:
+- Remove punctuation and capitalization
+
+## Setup
+
+```{r}
+library(tidyverse)
+
+# Point to data folders in the repo
+path_org <- 'data_org'
+path_clean <- 'data_clean'
+
+# Load in data files
+
+data_qualtrics <- read_csv(here::here(
+  path_org, 'PRCAQualtricsExport_FileC.csv'))
+
+data_prolific <- read_csv(here::here(
+  path_org, c('PRCAProlificExport_FileA.csv', 'PRCAProlificExport_FileB.csv')))
+
+# Join by prolific ID number
+survey <- left_join(data_qualtrics, data_prolific, by = c("Q0" = "Participant id"))
+
+# Rename columns
+survey <- survey |> 
+  rename(
+    q1_dislike_groupdiscussion = Q1,
+    q2_comfort_groupdiscussion = Q2,
+    q3_nervous_groupdiscussion = Q3,
+    q4_like_groupdiscussion = Q4,
+    q5_tense_newppl_groupdiscussion = Q5,
+    q6_relaxed_groupdiscussion = Q6,
+    q13_nervous_newppl_convo = Q13,
+    q14_nofear_speaking_convo = Q14,
+    q15_nervous_convo = Q15,
+    q16_relaxed_convo = Q16,
+    q17_relaxed_newppl_convo = Q17,
+    q18_afraid_convo = Q18,
+    q26_public_transit_3months = Q26,
+    q27_public_transit_dayuse = Q27,
+    q28_rideshare_3months = Q28,
+    q29_rideshare_dayuse = Q29,
+    q20_license = Q20,
+    q21_car_access = Q21,
+    q_advice_text = Q18.1,
+    q_transport_pref_text = Q19,
+    dem_age = Age,
+    dem_sex = Sex,
+    dem_country = 'Country of residence',
+    dem_student = 'Student status',
+    dem_employment = 'Employment status')
+```
+
+## Missing data
+
+For each research Q, we will be restricted to participants that answered the
+corresponding open-text question.
+
+```{r}
+survey |> summarise(
+  n_apprehension = sum(!is.na(q_advice_text)),
+  n_transportation = sum(!is.na(q_transport_pref_text))
+  )
+```
+
+This restricts our initial sample size to n = 165 for both research questions.
+
+```{r}
+# Missing data for those who provided q_advice_text
+survey |>
+  filter(!is.na(q_advice_text)) |>
+  summarise(across(everything(), \(x) sum(is.na(x)))) |>
+  pivot_longer(everything(), names_to = "col", values_to = "n_na") |>
+  filter(n_na > 0) |>
+  arrange(desc(n_na))
+
+# Missing data for those who provided q_transport_pref_text
+survey |>
+  filter(!is.na(q_transport_pref_text)) |>
+  summarise(across(everything(), \(x) sum(is.na(x)))) |>
+  pivot_longer(everything(), names_to = "col", values_to = "n_na") |>
+  filter(n_na > 0) |>
+  arrange(desc(n_na))
+
+# Missing PRCA data within the apprehension research sample
+survey |>
+  filter(!is.na(q_advice_text)) |>
+  rowwise() |>
+  mutate(n_na = sum(is.na(c_across(q1_dislike_groupdiscussion:q18_afraid_convo)))) |>
+  ungroup() |>
+  count(n_na) |>
+  arrange(desc(n_na))
+```
+
+q_29_rideshare_dayuse is critical for engineering our outcome variable for
+the transportation methods research question. The 7 NA observations will need
+to be excluded, however those participants can be kept for the apprehension
+research question.
+
+There are also 4 observations in the apprehension research question sample that
+are missing a value from 1 PRCA question each. While this is a minimal amount
+of missing data, it is predominantly missing from solo conversation Q's, and may
+bias our engineered outcome of 'biggest_fear' as a result. These 4 observations
+will be removed from the apprehension sample.
+
+Removals for both samples will occur after all processing steps before data is
+exported.
+
+## Processing for apprehension research Q
+
+```{r}
+# Identify forward and reverse-coded Q's (Higher scores = more apprehensive)
+forward_code <- c(
+  "q1_dislike_groupdiscussion",
+  "q3_nervous_groupdiscussion",
+  "q5_tense_newppl_groupdiscussion",
+  "q13_nervous_newppl_convo",
+  "q15_nervous_convo",
+  "q18_afraid_convo"
+  )
+reverse_code <- c(
+  "q2_comfort_groupdiscussion",
+  "q4_like_groupdiscussion",
+  "q6_relaxed_groupdiscussion",
+  "q14_nofear_speaking_convo",
+  "q16_relaxed_convo",
+  "q17_relaxed_newppl_convo"
+  )
+# Set numeric values for Likert scales
+likert_forward <- c(
+  "Strongly disagree"          = 1,
+  "Somewhat disagree"          = 2,
+  "Neither agree nor disagree" = 3,
+  "Somewhat agree"             = 4,
+  "Strongly agree"             = 5
+)
+likert_reverse <- c(
+  "Strongly disagree"          = 5,
+  "Somewhat disagree"          = 4,
+  "Neither agree nor disagree" = 3,
+  "Somewhat agree"             = 2,
+  "Strongly agree"             = 1
+)
+# Convert to numeric
+survey <- survey |>
+  mutate(
+    across(all_of(forward_code), ~ likert_forward[.x]),
+    across(all_of(reverse_code), ~ likert_reverse[.x])
+  )
+# Identify group discussion vs. solo conversation Q's
+group_discussion <- c(
+  "q1_dislike_groupdiscussion",
+  "q2_comfort_groupdiscussion",
+  "q3_nervous_groupdiscussion",
+  "q4_like_groupdiscussion",
+  "q6_relaxed_groupdiscussion"
+  )
+solo_conversation <- c(
+  "q13_nervous_newppl_convo",
+  "q14_nofear_speaking_convo",
+  "q15_nervous_convo",
+  "q16_relaxed_convo",
+  "q17_relaxed_newppl_convo",
+  "q18_afraid_convo"
+  )
+# Calculate biggest fear
+survey <- survey |> 
+  mutate(
+    
+#   Sum of group apprehension Q's
+    group_apprehension = rowSums(
+      pick(all_of(group_discussion)), na.rm = TRUE),
+    
+#   Sum of solo apprehension Q's
+    solo_apprehension = rowSums(
+      pick(all_of(solo_conversation)), na.rm = TRUE),
+
+#   Assign greatest of the two values (equal becomes NA)
+    biggest_fear = case_when(
+      group_apprehension > solo_apprehension ~ "group_apprehension",
+      solo_apprehension > group_apprehension ~ "solo_apprehension",
+      .default = NA)
+  )
+```
+
+## Processing for transportation research Q
+
+```{r}
+# Set numeric values for transportation variables
+usage_monthly <- c(
+  "Never"                     = 0,
+  "0-1 days a month"          = 1,
+  "2-4 days a month"          = 3,
+  "4-8 days a month"          = 6,
+  "8 or more days a month"    = 8
+  )
+usage_daily <- c(
+  "1-2 rides in a typical day"       = 1.5,
+  "3-4 rides in a typical day"       = 3.5,
+  "5-6 rides in a typical day"       = 5.5,
+  "7 or more rides in a typical day" = 7
+  )
+
+# Calculate highest usage transport method
+survey <- survey |>
+  mutate(
+    
+#   Convert 3-month usage variables to numeric
+    across(c(q26_public_transit_3months, q28_rideshare_3months), ~ usage_monthly[.x]),
+    
+#   Convert typical daily usage variables to numeric
+    across(c(q27_public_transit_dayuse, q29_rideshare_dayuse), ~ usage_daily[.x]),
+
+#   Multiply usage over past 3 months by typical daily usage (usage count estimate)
+    public_transit_count = q26_public_transit_3months * q27_public_transit_dayuse,
+    rideshare_count = q28_rideshare_3months * q29_rideshare_dayuse,
+
+#   Assign highest usage transport method (equal if BA)
+    highest_transport = case_when(
+      public_transit_count > rideshare_count ~ "public_transit",
+      rideshare_count > public_transit_count ~ "rideshare",
+      .default = NA)
+    )
+```
+
+## open text cleaning
+
+This script will perform only basic cleaning of the text by removing punctuation and capitalization. Further cleaning approaches such as removing stop words or stemming/lemmatization will be considered in other scripts.
+
+```{r}
+survey <- survey |> mutate(
+    q_advice_text =
+      str_to_lower(str_remove_all(q_advice_text, "[[:punct:]]")),
+  q_transport_pref_text =
+    str_to_lower(str_remove_all(q_transport_pref_text, "[[:punct:]]"))
+  )
+```
+
+## Filter and export
+
+```{r}
+# Full cleaned data for EDA
+survey |> write_csv(here::here(path_clean, "survey_clean.csv"))
+
+survey |> filter(
+  
+# Remove observations with NA values
+  !is.na(q_advice_text),
+  if_all(q1_dislike_groupdiscussion:q18_afraid_convo, \(x) !is.na(x))) |>
+
+# Remove redundant columns and save
+  select(q_advice_text, biggest_fear) |>
+  write_csv(here::here(path_clean, "survey_apprehension.csv"))
+
+# Data for transport research Q
+survey |> filter(
+  
+# Remove observations with NA values
+  !is.na(q_transport_pref_text),
+  if_all(q26_public_transit_3months:q29_rideshare_dayuse, \(x) !is.na(x))) |>
+  
+# Remove redundant columns and save
+  select(q_transport_pref_text, highest_transport) |>
+  write_csv(here::here(path_clean, "survey_transportation.csv"))
+```
